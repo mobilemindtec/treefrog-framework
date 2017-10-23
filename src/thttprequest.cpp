@@ -90,6 +90,7 @@ THttpRequest::THttpRequest(const THttpRequestHeader &header, const QByteArray &b
 {
     d->header = header;
     d->clientAddress = clientAddress;
+    d->rawBody = QByteArray(body);
     parseBody(body, header);
 }
 
@@ -119,6 +120,13 @@ THttpRequest &THttpRequest::operator=(const THttpRequest &other)
 {
     d = other.d;
     return *this;
+}
+
+/*!
+  Get raw body
+*/
+QByteArray THttpRequest::getRawBody() const{
+    return d->rawBody;
 }
 
 /*!

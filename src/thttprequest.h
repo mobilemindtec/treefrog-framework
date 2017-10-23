@@ -32,6 +32,7 @@ public:
     QJsonDocument jsonData;
 #endif
     QHostAddress clientAddress;
+    QByteArray rawBody;
 };
 
 
@@ -72,6 +73,7 @@ public:
     QByteArray cookie(const QString &name) const;
     QList<TCookie> cookies() const;
     QHostAddress clientAddress() const { return d->clientAddress; }
+    QByteArray getRawBody() const;
 
 #if QT_VERSION >= 0x050000
     bool hasJson() const { return !d->jsonData.isNull(); }
