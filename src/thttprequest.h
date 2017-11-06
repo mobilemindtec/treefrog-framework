@@ -16,6 +16,8 @@
 #include <QJsonDocument>
 #endif
 
+class QIODevice;
+
 
 class T_CORE_EXPORT THttpRequestData : public QSharedData
 {
@@ -25,14 +27,14 @@ public:
     ~THttpRequestData() { }
 
     THttpRequestHeader header;
+    QByteArray bodyArray;
     QList<QPair<QString, QString>> queryItems;
     QList<QPair<QString, QString>> formItems;
     TMultipartFormData multipartFormData;
 #if QT_VERSION >= 0x050000
     QJsonDocument jsonData;
 #endif
-    QHostAddress clientAddress;
-    QByteArray rawBody;
+    QHostAddress clientAddress;    
 };
 
 
@@ -73,7 +75,7 @@ public:
     QByteArray cookie(const QString &name) const;
     QList<TCookie> cookies() const;
     QHostAddress clientAddress() const { return d->clientAddress; }
-    QByteArray getRawBody() const;
+    QIODevice *rawBody();
 
 #if QT_VERSION >= 0x050000
     bool hasJson() const { return !d->jsonData.isNull(); }
@@ -96,6 +98,7 @@ private:
     void parseBody(const QByteArray &body, const THttpRequestHeader &header);
 
     QSharedDataPointer<THttpRequestData> d;
+    QIODevice *bodyDevide {nullptr};
     friend class TMultipartFormData;
 };
 
