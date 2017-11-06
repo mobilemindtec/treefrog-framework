@@ -596,7 +596,6 @@ QIODevice *THttpRequest::rawBody()
     return bodyDevide;
 }
 
-
 /*!
   \fn const THttpRequestHeader &THttpRequest::header() const
   Returns the HTTP header of the request.
