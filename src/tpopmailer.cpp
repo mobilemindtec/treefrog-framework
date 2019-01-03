@@ -9,12 +9,7 @@
 #include <QCryptographicHash>
 #include "tpopmailer.h"
 #include "tsystemglobal.h"
-
-#if defined(Q_OS_WIN)
-#  define CRLF "\n"
-#else
-#  define CRLF "\r\n"
-#endif
+using namespace Tf;
 
 /*!
   \class TPopMailer
@@ -22,13 +17,17 @@
   emails by POP.
 */
 
-TPopMailer::TPopMailer(QObject *parent)
-    : QObject(parent), socket(new QTcpSocket), popPort(0), apopEnabled(false)
+TPopMailer::TPopMailer(QObject *parent) :
+    QObject(parent),
+    socket(new QTcpSocket)
 { }
 
 
-TPopMailer::TPopMailer(const QString &hostName, quint16 port, QObject *parent)
-    : QObject(parent), socket(new QTcpSocket), popHostName(hostName), popPort(port), apopEnabled(false)
+TPopMailer::TPopMailer(const QString &hostName, quint16 port, QObject *parent) :
+    QObject(parent),
+    socket(new QTcpSocket),
+    popHostName(hostName),
+    popPort(port)
 { }
 
 
@@ -157,7 +156,7 @@ bool TPopMailer::cmdRetr(int index, QByteArray &message)
     if (res) {
         while (socket->waitForReadyRead(5000)) {
             message += socket->readAll();
-            if (message.endsWith("." CRLF)) {
+            if (message.endsWith(QByteArray(".") + CRLF)) {
                 break;
             }
         }

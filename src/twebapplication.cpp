@@ -8,10 +8,8 @@
 #include <QDir>
 #include <QTextCodec>
 #include <QDateTime>
-#if QT_VERSION >= 0x050000
-# include <QJsonDocument>
-# include <QJsonObject>
-#endif
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <TWebApplication>
 #include <TSystemGlobal>
 #include <TAppSettings>
@@ -47,7 +45,7 @@ TWebApplication::TWebApplication(int &argc, char **argv)
 #endif
       dbEnvironment(DEFAULT_DATABASE_ENVIRONMENT)
 {
-#if defined(Q_OS_WIN) && QT_VERSION >= 0x050000
+#if defined(Q_OS_WIN)
     installNativeEventFilter(new TNativeEventFilter);
 #endif
 
@@ -310,10 +308,7 @@ QByteArray TWebApplication::internetMediaType(const QString &ext, bool appendCha
 */
 QString TWebApplication::validationErrorMessage(int rule) const
 {
-    validationSetting->beginGroup("ErrorMessage");
-    QString msg = validationSetting->value(QString::number(rule)).toString();
-    validationSetting->endGroup();
-    return msg;
+    return validationSetting->value("ErrorMessage/" + QString::number(rule)).toString();
 }
 
 /*!
@@ -351,7 +346,11 @@ int TWebApplication::maxNumberOfAppServers() const
 {
     QString mpmstr = Tf::appSettings()->value(Tf::MultiProcessingModule).toString().toLower();
     int num = Tf::appSettings()->readValue(QLatin1String("MPM.") + mpmstr + ".MaxAppServers").toInt();
-    return (num > 0) ? num : qMax(std::thread::hardware_concurrency(), (uint)1);
+    if (num <= 0) {
+        num = qMax(std::thread::hardware_concurrency(), (uint)1);
+        tSystemWarn("Sets max number of AP servers to %d", num);
+    }
+    return num;
 }
 
 /*!
@@ -482,7 +481,6 @@ const QVariantMap &TWebApplication::getConfig(const QString &configName)
                     configMap.insert(cnf, map);
                     break;
 
-#if QT_VERSION >= 0x050000
                 } else if (suffix == "json") {
                     // JSON format
                     QFile jsonFile(fi.absoluteFilePath());
@@ -492,7 +490,7 @@ const QVariantMap &TWebApplication::getConfig(const QString &configName)
                         configMap.insert(cnf, json.toVariantMap());
                         break;
                     }
-#endif
+
                 } else {
                     tSystemWarn("Invalid format config, %s", qPrintable(fi.fileName()));
                 }

@@ -13,6 +13,7 @@ Configuration:
   -h, --help          display this help and exit
   --enable-debug      compile with debugging information
   --enable-gui-mod    compile and link with QtGui module
+  --enable-shared-mongoc  link the mongoc shared library
 
 Installation directories:
   --prefix=PREFIX     install files in PREFIX [$PREFIX]
@@ -126,6 +127,9 @@ while [ -n "`echo $1 | grep '-'`" ]; do
     --enable-gui-mod | --enable-gui-mod=*)
       ENABLE_GUI="use_gui=1"
       ;;
+    --enable-shared-mongoc | --enable-shared-mongoc=*)
+      ENABLE_SHARED_MONGOC="shared_mongoc=1"
+      ;;
     --help | -help | -h | *)
       usage
       exit
@@ -146,7 +150,6 @@ fi
 
 # search qmake command
 if [ -z "$QMAKE" ]; then
-  which qmake-qt4 >/dev/null 2>&1 && QMAKE=qmake-qt4
   which qmake-qt5 >/dev/null 2>&1 && QMAKE=qmake-qt5
   which qmake     >/dev/null 2>&1 && QMAKE=qmake
 
@@ -159,26 +162,28 @@ fi
 
 cd "$BASEDIR/src"
 [ -f Makefile ] && make -k distclean >/dev/null 2>&1
-$QMAKE $OPT target.path=\"$LIBDIR\" header.path=\"$INCLUDEDIR\" $ENABLE_GUI
+$QMAKE $OPT target.path=\"$LIBDIR\" header.path=\"$INCLUDEDIR\" $ENABLE_GUI $ENABLE_SHARED_MONGOC
 cd "$BASEDIR/tools"
 [ -f Makefile ] && make -k distclean >/dev/null 2>&1
 $QMAKE -recursive $OPT target.path=\"$BINDIR\" header.path=\"$INCLUDEDIR\" datadir=\"$DATADIR\" lib.path=\"$LIBDIR\"
 make qmake
 
 # compile MongoDB files
-cd "$BASEDIR/3rdparty/mongo-c-driver"
-echo
-echo -n "Compiling MongoDB driver library ... "
-$QMAKE $OPT mongo-c-driver.pro
-make clean >/dev/null 2>&1
-make >/dev/null 2>&1
-RET=$?
-if [ $RET != 0 ]; then
-  echo "failed"
-  echo "MongoDB driver not available."
-  exit $RET
+if [ -z "$ENABLE_SHARED_MONGOC" ]; then
+  cd "$BASEDIR/3rdparty/mongo-c-driver"
+  echo
+  echo -n "Compiling MongoDB driver library ... "
+  $QMAKE $OPT mongo-c-driver.pro
+  make clean >/dev/null 2>&1
+  make >/dev/null 2>&1
+  RET=$?
+  if [ $RET != 0 ]; then
+    echo "failed"
+    echo "MongoDB driver not available."
+    exit $RET
+  fi
+  echo "OK"
 fi
-echo "OK"
 
 echo
 echo "First, run \"make\" and \"sudo make install\" in src directory."

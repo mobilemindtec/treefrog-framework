@@ -1,8 +1,6 @@
 #ifndef TACTIONCONTROLLER_H
 #define TACTIONCONTROLLER_H
 
-#include <QObject>
-#include <QString>
 #include <QHostAddress>
 #include <QDomDocument>
 #include <TGlobal>
@@ -13,16 +11,12 @@
 #include <TSession>
 #include <TCookieJar>
 #include <TAccessValidator>
-#if QT_VERSION >= 0x050000
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QJsonValue>
-#endif
 
 class TActionView;
 class TAbstractUser;
 class TFormValidator;
+class QCborMap;
+class QCborValue;
 
 
 class T_CORE_EXPORT TActionController : public QObject, public TAbstractController, public TActionHelper, protected TAccessValidator
@@ -79,13 +73,19 @@ protected:
     bool renderXml(const QVariantMap &map);
     bool renderXml(const QVariantList &list);
     bool renderXml(const QStringList &list);
-#if QT_VERSION >= 0x050000
     bool renderJson(const QJsonDocument &document);
     bool renderJson(const QJsonObject &object);
     bool renderJson(const QJsonArray &array);
     bool renderJson(const QVariantMap &map);
     bool renderJson(const QVariantList &list);
     bool renderJson(const QStringList &list);
+#if QT_VERSION >= 0x050c00  // 5.12.0
+    bool renderCbor(const QVariant &variant);
+    bool renderCbor(const QVariantMap &map);
+    bool renderCbor(const QVariantHash &hash);
+    bool renderCbor(const QCborValue &value);
+    bool renderCbor(const QCborMap &map);
+    bool renderCbor(const QCborArray &array);
 #endif
     bool renderErrorResponse(int statusCode);
     void redirect(const QUrl &url, int statusCode = Tf::Found);

@@ -12,14 +12,13 @@
 #include <TAppSettings>
 #include <TThreadApplicationServer>
 #include <TMultiplexingServer>
-#if QT_VERSION >= 0x050000
-# include <TJSLoader>
-#endif
+#include <TJSLoader>
 #include <TSystemGlobal>
 #include <cstdlib>
 #include "thazardptrmanager.h"
 #include "tsystemglobal.h"
 #include "signalhandler.h"
+#include "affinity.h"
 using namespace TreeFrog;
 
 #define DEBUG_MODE_OPTION  "--debug"
@@ -27,44 +26,27 @@ using namespace TreeFrog;
 #define AUTO_RELOAD_OPTION "-r"
 
 
-#if QT_VERSION >= 0x050000
 static void messageOutput(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
     QByteArray msg = message.toLocal8Bit();
     switch (type) {
     case QtFatalMsg:
+        tFatal("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
+        break;
     case QtCriticalMsg:
-        tSystemError("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
+        tError("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
         break;
     case QtWarningMsg:
-        tSystemWarn("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
+        tWarn("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
         break;
     case QtDebugMsg:
-        tSystemDebug("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
+        tDebug("%s (%s:%u %s)", msg.constData(), context.file, context.line, context.function);
         break;
     default:
         break;
     }
 }
-#else
-static void messageOutput(QtMsgType type, const char *msg)
-{
-    switch (type) {
-    case QtFatalMsg:
-    case QtCriticalMsg:
-        tSystemError("%s", msg);
-        break;
-    case QtWarningMsg:
-        tSystemWarn("%s", msg);
-        break;
-    case QtDebugMsg:
-        tSystemDebug("%s", msg);
-        break;
-    default:
-        break;
-    }
-}
-#endif // QT_VERSION >= 0x050000
+
 
 #if defined(Q_OS_UNIX)
 static void writeFailure(const void *data, int size)
@@ -93,8 +75,13 @@ static QMap<QString, QString> convertArgs(const QStringList &args)
 int main(int argc, char *argv[])
 {
     TWebApplication webapp(argc, argv);
-    TApplicationServerBase *server = 0;
+    TApplicationServerBase *server = nullptr;
     int ret = -1;
+
+    //int sid = webapp.applicationServerId();
+    //if (sid >= 0) {
+    //    Tf::setCpuAffinity(sid);
+    //}
 
     // Setup loggers
     Tf::setupSystemLogger();
@@ -105,11 +92,7 @@ int main(int argc, char *argv[])
     // Setup hazard pointer
     THazardPtrManager::instance().setGarbageCollectionBufferSize(Tf::app()->maxNumberOfThreadsPerAppServer());
 
-#if QT_VERSION >= 0x050000
     qInstallMessageHandler(messageOutput);
-#else
-    qInstallMsgHandler(messageOutput);
-#endif
     QMap<QString, QString> args = convertArgs(QCoreApplication::arguments());
     int sock = args.value(SOCKET_OPTION).toInt();
     bool reload = args.contains(AUTO_RELOAD_OPTION);
@@ -143,13 +126,6 @@ int main(int argc, char *argv[])
     QTextCodec *codec = webapp.codecForInternal();
     QTextCodec::setCodecForLocale(codec);
 
-#if QT_VERSION < 0x050000
-    QTextCodec::setCodecForTr(codec);
-    QTextCodec::setCodecForCStrings(codec);
-    tSystemDebug("setCodecForTr: %s", codec->name().data());
-    tSystemDebug("setCodecForCStrings: %s", codec->name().data());
-#endif
-
     if (!webapp.webRootExists()) {
         tSystemError("No such directory");
         fprintf(stderr, "No such directory\n");
@@ -162,11 +138,9 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Settings file not found\n");
         goto finish;
     } else {
-#if QT_VERSION >= 0x050000
         // Sets search paths for JavaScript
         QStringList jpaths = Tf::appSettings()->value(Tf::JavaScriptPath, "script;node_modules").toString().split(';');
         TJSLoader::setDefaultSearchPaths(jpaths);
-#endif
     }
 
 #ifdef Q_OS_WIN
@@ -224,10 +198,22 @@ int main(int argc, char *argv[])
         goto finish;
     }
 
+    QObject::connect(&webapp, &QCoreApplication::aboutToQuit, [=](){ server->stop(); });
     ret = webapp.exec();
-    server->stop();
 
 finish:
+    switch (webapp.multiProcessingModule()) {
+    case TWebApplication::Thread:
+        delete server;
+        break;
+
+    case TWebApplication::Hybrid:
+        break;
+
+    default:
+        break;
+    }
+
     // Release loggers
     Tf::releaseAppLoggers();
     Tf::releaseQueryLogger();

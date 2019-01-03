@@ -47,8 +47,9 @@ bool TFileAioWriter::open()
     QMutexLocker locker(&d->mutex);
 
     if (d->fileDescriptor <= 0) {
-        if (d->fileName.isEmpty())
+        if (d->fileName.isEmpty()) {
             return false;
+        }
 
         d->fileDescriptor = ::open(qPrintable(d->fileName), (O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC), 0666);
         if (d->fileDescriptor < 0) {
@@ -127,7 +128,7 @@ int TFileAioWriter::write(const char *data, int length)
     if (ret < 0) {
         //fprintf(stderr, "aio_write error fd:%d (pid:%d tid:%d) ret:%d errno:%d\n", d->fileDescriptor, getpid(), gettid(), ret, err);
         //fprintf(stderr, "aio_write str: %s\n", data);
-        delete (char *)cb->aio_buf;
+        delete[] (char *)cb->aio_buf;
         delete cb;
 
         if (err != EAGAIN) {

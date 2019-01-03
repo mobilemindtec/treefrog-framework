@@ -130,6 +130,7 @@ public:
         append(L("sql"));
         append(L("test"));
         append(L("tmp"));
+        append(L("cmake"));
     }
 };
 Q_GLOBAL_STATIC(SubDirs, subDirs)
@@ -174,13 +175,21 @@ public:
         append(L("script") + SEP + "react.js");             // React
         append(L("script") + SEP + "react-with-addons.js"); // React
         append(L("script") + SEP + "react-dom-server.js");  // React
+        // CMake
+        append(L("CMakeLists.txt"));
+        append(L("cmake") + SEP +"CacheClean.cmake");
+        append(L("cmake") + SEP +"TargetCmake.cmake");
+        append(L("controllers") + SEP + "CMakeLists.txt");
+        append(L("models") + SEP + "CMakeLists.txt");
+        append(L("views") + SEP + "CMakeLists.txt");
+        append(L("helpers") + SEP + "CMakeLists.txt");
     }
 };
 Q_GLOBAL_STATIC(FilePaths, filePaths)
 
 
-const QString appIni = QLatin1String("config") + QDir::separator() + "application.ini";
-const QString devIni = QLatin1String("config") + QDir::separator() + "development.ini";
+const QString appIni = QLatin1String("config") + SEP + "application.ini";
+const QString devIni = QLatin1String("config") + SEP + "development.ini";
 static QSettings appSettings(appIni, QSettings::IniFormat);
 static QSettings devSettings(devIni, QSettings::IniFormat);
 static QString templateSystem;
@@ -328,8 +337,7 @@ static bool createNewApplication(const QString &name)
     printf("  created   %s\n", qPrintable(name));
 
     // Creates sub-directories
-    for (QStringListIterator i(*subDirs()); i.hasNext(); ) {
-        const QString &str = i.next();
+    for (const QString &str : *subDirs()) {
         QString d = name + SEP + str;
         if (!mkpath(dir, d)) {
             return false;
@@ -339,11 +347,15 @@ static bool createNewApplication(const QString &name)
     // Copies files
     copy(dataDirPath + "app.pro", name + SEP + name + ".pro");
 
-    for (QStringListIterator it(*filePaths()); it.hasNext(); ) {
-        const QString &path = it.next();
+    for (auto &path : *filePaths()) {
         QString filename = QFileInfo(path).fileName();
         QString dst = name + SEP + path;
-        copy(dataDirPath + filename, dst);
+
+        if (filename == "CMakeLists.txt") {
+            copy(dataDirPath + path, dst);
+        } else {
+            copy(dataDirPath + filename, dst);
+        }
 
         // Replaces a string in application.ini file
         if (filename == "application.ini") {
@@ -461,35 +473,16 @@ static bool checkIniFile()
 static void printSuccessMessage(const QString &model)
 {
     QString msg;
-    if (!QFile("Makefile").exists()) {
-        QProcess cmd;
-        QStringList args;
-        args << "-r";
-        args << "CONFIG+=debug";
-        // `qmake -r CONFIG+=debug`
-        cmd.start("qmake", args);
-        cmd.waitForStarted();
-        cmd.waitForFinished();
-
-        // `make qmake`
-#ifdef Q_OS_WIN
-        cmd.start("mingw32-make", QStringList("qmake"));
-#else
-        cmd.start("make", QStringList("qmake"));
-#endif
-        cmd.waitForStarted();
-        cmd.waitForFinished();
-
-        msg = "Run `qmake -r%0 CONFIG+=debug` to generate a Makefile for debug mode.\nRun `qmake -r%0 CONFIG+=release` to generate a Makefile for release mode.";
+    if (!QFile("Makefile").exists() && !QFile(L("build") + SEP + "Makefile").exists()) {
+        msg = "qmake:\n Run `qmake -r%0 CONFIG+=debug` to generate a Makefile for debug mode.\n Run `qmake -r%0 CONFIG+=release` to generate a Makefile for release mode.\n";
 #ifdef Q_OS_DARWIN
-# if QT_VERSION >= 0x050000
         msg = msg.arg(" -spec macx-clang");
-# else
-        msg = msg.arg(" -spec macx-g++");
-# endif
 #else
         msg = msg.arg("");
 #endif
+        msg += "\n or\n\ncmake:\n";
+        msg += " Run `mkdir build; cd build; cmake ..` to generate a Makefile.\n";
+        msg += " Run `cd build; make cmake` to regenerate the Makefile.";
     }
 
     putchar('\n');
@@ -535,7 +528,7 @@ int main(int argc, char *argv[])
         break;
 
     case ShowDriverPath: {
-        QString path = QLibraryInfo::location(QLibraryInfo::PluginsPath) + QDir::separator() + "sqldrivers";
+        QString path = QLibraryInfo::location(QLibraryInfo::PluginsPath) + SEP + "sqldrivers";
         QFileInfo fi(path);
         if (!fi.exists() || !fi.isDir()) {
             qCritical("Error: database driver's directory not found");
@@ -563,7 +556,7 @@ int main(int argc, char *argv[])
         if (checkIniFile()) {
             // MongoDB settings
             QString mongoini = appSettings.value("MongoDbSettingsFile").toString().trimmed();
-            QString mnginipath = QLatin1String("config") + QDir::separator() + mongoini;
+            QString mnginipath = QLatin1String("config") + SEP + mongoini;
 
             if (mongoini.isEmpty() || !QFile(mnginipath).exists()) {
                 qCritical("MongoDB settings file not found");
@@ -598,10 +591,6 @@ int main(int argc, char *argv[])
         QTextCodec *codec = QTextCodec::codecForName(appSettings.value("InternalEncoding").toByteArray().trimmed());
         codec = (codec) ? codec : QTextCodec::codecForLocale();
         QTextCodec::setCodecForLocale(codec);
-#if QT_VERSION < 0x050000
-        QTextCodec::setCodecForTr(codec);
-        QTextCodec::setCodecForCStrings(codec);
-#endif
 
         // ERB or Otama
         templateSystem = devSettings.value("TemplateSystem").toString().toLower();

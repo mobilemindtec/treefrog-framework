@@ -66,11 +66,15 @@ void TActionContext::execute(THttpRequest &request, int sid)
         const THttpRequestHeader &reqHeader = httpReq->header();
 
         // Access log
+        QByteArray firstLine;
+        firstLine.reserve(200);
+        firstLine += reqHeader.method();
+        firstLine += ' ';
+        firstLine += reqHeader.path();
+        firstLine += QStringLiteral(" HTTP/%1.%2").arg(reqHeader.majorVersion()).arg(reqHeader.minorVersion()).toLatin1();
         accessLogger.setTimestamp(QDateTime::currentDateTime());
-        QByteArray firstLine = reqHeader.method() + ' ' + reqHeader.path();
-        firstLine += QString(" HTTP/%1.%2").arg(reqHeader.majorVersion()).arg(reqHeader.minorVersion()).toLatin1();
         accessLogger.setRequest(firstLine);
-        accessLogger.setRemoteHost( (Tf::appSettings()->value(Tf::ListenPort).toUInt() > 0) ? clientAddress().toString().toLatin1() : QByteArray("(unix)") );
+        accessLogger.setRemoteHost( (Tf::appSettings()->value(Tf::ListenPort).toUInt() > 0) ? clientAddress().toString().toLatin1() : QByteArrayLiteral("(unix)") );
 
         tSystemDebug("method : %s", reqHeader.method().data());
         tSystemDebug("path : %s", reqHeader.path().data());
@@ -153,10 +157,11 @@ void TActionContext::execute(THttpRequest &request, int sid)
             setTransactionEnabled(currController->transactionEnabled());
 
             // Do filters
+            bool dispatched = false;
             if (Q_LIKELY(currController->preFilter())) {
 
                 // Dispathes
-                bool dispatched = ctlrDispatcher.invoke(route.action, route.params);
+                dispatched = ctlrDispatcher.invoke(route.action, route.params);
                 if (Q_LIKELY(dispatched)) {
                     autoRemoveFiles << currController->autoRemoveFiles;  // Adds auto-remove files
 
@@ -187,6 +192,10 @@ void TActionContext::execute(THttpRequest &request, int sid)
                             // Sets the path in the session cookie
                             QString cookiePath = Tf::appSettings()->value(Tf::SessionCookiePath).toString();
                             currController->addCookie(TSession::sessionName(), currController->session().id(), expire, cookiePath, QString(), false, true);
+
+                            // Commits a transaction for session
+                            commitTransactions();
+
                         } else {
                             tSystemError("Failed to store a session");
                         }
@@ -241,17 +250,29 @@ void TActionContext::execute(THttpRequest &request, int sid)
             }
 
             // Sets the default status code of HTTP response
-            accessLogger.setStatusCode( (!currController->response.isBodyNull()) ? currController->statusCode() : Tf::InternalServerError );
-            currController->response.header().setStatusLine(accessLogger.statusCode(), THttpUtility::getResponseReasonPhrase(accessLogger.statusCode()));
+            int bytes = 0;
+            if (Q_UNLIKELY(currController->response.isBodyNull())) {
+                accessLogger.setStatusCode((dispatched) ? Tf::InternalServerError : Tf::NotFound);
+                bytes = writeResponse(accessLogger.statusCode(), responseHeader);
+            } else {
+                accessLogger.setStatusCode(currController->statusCode());
+                currController->response.header().setStatusLine(currController->statusCode(), THttpUtility::getResponseReasonPhrase(currController->statusCode()));
 
-            // Writes a response and access log
-            qint64 bodyLength = (currController->response.header().contentLength() > 0) ? currController->response.header().contentLength() : currController->response.bodyLength();
-            int bytes = writeResponse(currController->response.header(), currController->response.bodyIODevice(),
+                // Writes a response and access log
+                qint64 bodyLength = (currController->response.header().contentLength() > 0) ? currController->response.header().contentLength() : currController->response.bodyLength();
+                bytes = writeResponse(currController->response.header(), currController->response.bodyIODevice(),
                                       bodyLength);
+            }
             accessLogger.setResponseBytes(bytes);
 
-            // Session GC
-            TSessionManager::instance().collectGarbage();
+            // Session
+            if (currController->sessionEnabled()) {
+                // Session GC
+                TSessionManager::instance().collectGarbage();
+
+                // Commits a transaction for session
+                commitTransactions();
+            }
 
         } else {
             accessLogger.setStatusCode( Tf::BadRequest );  // Set a default status code
@@ -335,9 +356,9 @@ void TActionContext::execute(THttpRequest &request, int sid)
         tError("Caught StandardException: %s  [%s:%d]", qPrintable(e.message()), qPrintable(e.fileName()), e.lineNumber());
         tSystemError("Caught StandardException: %s  [%s:%d]", qPrintable(e.message()), qPrintable(e.fileName()), e.lineNumber());
         closeHttpSocket();
-    } catch (...) {
-        tError("Caught Exception");
-        tSystemError("Caught Exception");
+    } catch (std::exception &e) {
+        tError("Caught Exception: %s", e.what());
+        tSystemError("Caught Exception: %s", e.what());
         closeHttpSocket();
     }
 

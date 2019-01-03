@@ -12,11 +12,11 @@
 #include <TMongoCursor>
 #include "mongocommand.h"
 
-static QSettings *mongoSettings = 0;
+static QSettings *mongoSettings = nullptr;
 
 
 MongoCommand::MongoCommand(const QString &path)
-    : driver(new TMongoDriver), settingsPath(path), databaseName()
+    : driver(new TMongoDriver), settingsPath(path)
 {
     if (!mongoSettings) {
         if (!QFile::exists(settingsPath)) {
@@ -29,28 +29,25 @@ MongoCommand::MongoCommand(const QString &path)
 
 MongoCommand::~MongoCommand()
 {
-    if (driver->isOpen())
+    if (driver->isOpen()) {
         close();
-
+    }
     delete driver;
 }
 
 
 bool MongoCommand::open(const QString &env)
 {
-    mongoSettings->beginGroup(env);
-
-    databaseName = mongoSettings->value("DatabaseName").toString().trimmed();
+    databaseName = mongoSettings->value(env + "/DatabaseName").toString().trimmed();
     printf("DatabaseName: %s\n", qPrintable(databaseName));
 
-    QString host = mongoSettings->value("HostName").toString().trimmed();
+    QString host = mongoSettings->value(env +"/HostName").toString().trimmed();
     printf("HostName:     %s\n", qPrintable(host));
 
-    int port = mongoSettings->value("Port").toInt();
-    QString user = mongoSettings->value("UserName").toString().trimmed();
-    QString pass = mongoSettings->value("Password").toString().trimmed();
-    QString opts = mongoSettings->value("ConnectOptions").toString().trimmed();
-    mongoSettings->endGroup();
+    int port = mongoSettings->value(env +"/Port").toInt();
+    QString user = mongoSettings->value(env +"/UserName").toString().trimmed();
+    QString pass = mongoSettings->value(env +"/Password").toString().trimmed();
+    QString opts = mongoSettings->value(env +"/ConnectOptions").toString().trimmed();
 
     bool status = driver->open(databaseName, user, pass, host, port, opts);
     if (!status) {

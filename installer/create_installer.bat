@@ -4,22 +4,25 @@
 :: Edit this line to run the batch file for Qt environment.
 ::
 
-set VERSION=1.19.0
+set VERSION=1.23.0
+set QTBASE=C:\Qt
 set TFDIR=C:\TreeFrog\%VERSION%
+
 set BASEDIR=%~dp0
 set SLNFILE=%BASEDIR%\treefrog-setup\treefrog-setup.sln
 cd %BASEDIR%
 
 :: MinGW
-call :build_msi "C:\Qt\Qt5.9.1\5.9.1\mingw53_32\bin\qtenv2.bat"       5.9
-call :build_msi "C:\Qt\Qt5.8.0-mingw\5.8\mingw53_32\bin\qtenv2.bat"   5.8
+call :build_msi "%QTBASE%\Qt5.12.0\5.12.0\mingw73_64\bin\qtenv2.bat"     5.12
+call :build_msi "%QTBASE%\Qt5.11.3\5.11.3\mingw53_32\bin\qtenv2.bat"     5.11
 call :build_setup treefrog-%VERSION%-mingw-setup.exe
 
-:: MSVC2015
-call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
-call :build_msi "C:\Qt\Qt5.9.1\5.9.1\msvc2015_64\bin\qtenv2.bat"        5.9
-call :build_msi "C:\Qt\Qt5.8.0-msvc2015\5.8\msvc2015_64\bin\qtenv2.bat" 5.8
-call :build_setup treefrog-%VERSION%-msvc2015_64-setup.exe
+:: MSVC2017
+call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64
+
+call :build_msi "%QTBASE%\Qt5.12.0\5.12.0\msvc2017_64\bin\qtenv2.bat"      5.12
+call :build_msi "%QTBASE%\Qt5.11.3\5.11.3\msvc2017_64\bin\qtenv2.bat"      5.11
+call :build_setup treefrog-%VERSION%-msvc2017_64-setup.exe
 
 
 echo.
@@ -80,7 +83,7 @@ goto :eof
 ::===セットアップEXE作成
 :build_setup
 @setlocal
-"C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE\devenv" %SLNFILE%  /rebuild release
+"C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\IDE\devenv" %SLNFILE%  /rebuild release
 if ERRORLEVEL 1 goto :error
 move %BASEDIR%\treefrog-setup\Release\treefrog-setup.exe %BASEDIR%\treefrog-setup\Release\%1
 goto :eof

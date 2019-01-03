@@ -11,8 +11,7 @@
 #include <QTcpSocket>
 #include <TApplicationServerBase>
 #include <TSystemGlobal>
-
-#define CRLF "\r\n"
+using namespace Tf;
 
 const int DEFAULT_PORT = 6379;
 
@@ -27,9 +26,7 @@ TRedisDriver::TRedisDriver()
 TRedisDriver::~TRedisDriver()
 {
     close();
-    if (client) {
-        delete client;
-    }
+    delete client;
 }
 
 

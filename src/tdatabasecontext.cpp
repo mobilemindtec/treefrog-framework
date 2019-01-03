@@ -7,7 +7,7 @@
 
 #include <QtCore>
 #include <QSqlDatabase>
-#include <QSqlDriver>
+#include <QThreadStorage>
 #include <TWebApplication>
 #include <TKvsDriver>
 #include <ctime>
@@ -16,16 +16,19 @@
 #include "tkvsdatabasepool.h"
 #include "tsystemglobal.h"
 
+// Stores a pointer to current database context into TLS
+//  - qulonglong type to prevent qThreadStorage_deleteData() function to work
+static QThreadStorage<qulonglong> databaseContextPtrTls;
+
 /*!
   \class TDatabaseContext
   \brief The TDatabaseContext class is the base class of contexts for
   database access.
 */
 
-TDatabaseContext::TDatabaseContext()
-    : sqlDatabases(),
-      kvsDatabases(),
-      transactions()
+TDatabaseContext::TDatabaseContext() :
+    sqlDatabases(),
+    kvsDatabases()
 { }
 
 
@@ -40,18 +43,31 @@ QSqlDatabase &TDatabaseContext::getSqlDatabase(int id)
     T_TRACEFUNC("id:%d", id);
 
     if (!Tf::app()->isSqlDatabaseAvailable()) {
-        return sqlDatabases[0];  // invalid database
+        return sqlDatabases[0].database();  // invalid database
     }
 
     if (id < 0 || id >= Tf::app()->sqlDatabaseSettingsCount()) {
         throw RuntimeException("error database id", __FILE__, __LINE__);
     }
 
-    QSqlDatabase &db = sqlDatabases[id];
-    if (!db.isValid()) {
-        db = TSqlDatabasePool::instance()->database(id);
-        beginTransaction(db);
+    TSqlTransaction &tx = sqlDatabases[id];
+    QSqlDatabase &db = tx.database();
+
+    if (db.isValid() && tx.isActive()) {
+        return db;
     }
+
+    int n = 0;
+    do {
+        if (! db.isValid()) {
+            db = TSqlDatabasePool::instance()->database(id);
+        }
+
+        if (tx.begin()) {
+            break;
+        }
+        TSqlDatabasePool::instance()->pool(db, true);
+    } while (++n < 2);  // try two times
 
     idleElapsed = (uint)std::time(nullptr);
     return db;
@@ -62,8 +78,8 @@ void TDatabaseContext::releaseSqlDatabases()
 {
     rollbackTransactions();
 
-    for (QMap<int, QSqlDatabase>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) {
-        TSqlDatabasePool::instance()->pool(it.value());
+    for (QMap<int, TSqlTransaction>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) {
+        TSqlDatabasePool::instance()->pool(it.value().database());
     }
     sqlDatabases.clear();
 }
@@ -108,47 +124,87 @@ void TDatabaseContext::release()
 }
 
 
-void TDatabaseContext::setTransactionEnabled(bool enable)
+void TDatabaseContext::setTransactionEnabled(bool enable, int id)
 {
-    transactions.setEnabled(enable);
-}
-
-
-bool TDatabaseContext::beginTransaction(QSqlDatabase &database)
-{
-    bool ret = true;
-    if (database.driver()->hasFeature(QSqlDriver::Transactions)) {
-        ret = transactions.begin(database);
+    if (id < 0) {
+        tError("Invalid database ID: %d", id);
+        return;
     }
-    return ret;
+    return sqlDatabases[id].setEnabled(enable);
 }
 
 
 void TDatabaseContext::commitTransactions()
 {
-    transactions.commitAll();
+    for (QMap<int, TSqlTransaction>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) {
+        TSqlTransaction &tx = it.value();
+        if (! tx.commit()) {
+            TSqlDatabasePool::instance()->pool(tx.database(), true);
+        }
+    }
 }
 
 
 bool TDatabaseContext::commitTransaction(int id)
 {
-    return transactions.commit(id);
+    bool res = false;
+
+    if (id < 0 || id >= sqlDatabases.count()) {
+        tError("Failed to commit transaction. Invalid database ID: %d", id);
+        return res;
+    }
+
+    res = sqlDatabases[id].commit();
+    if (! res) {
+        TSqlDatabasePool::instance()->pool(sqlDatabases[id].database(), true);
+    }
+    return res;
 }
 
 
 void TDatabaseContext::rollbackTransactions()
 {
-    transactions.rollbackAll();
+    for (QMap<int, TSqlTransaction>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) {
+        TSqlTransaction &tx = it.value();
+        if (! tx.rollback()) {
+            TSqlDatabasePool::instance()->pool(tx.database(), true);
+        }
+    }
 }
 
 
 bool TDatabaseContext::rollbackTransaction(int id)
 {
-    return transactions.rollback(id);
+    bool res = false;
+
+    if (id < 0 || id >= sqlDatabases.count()) {
+        tError("Failed to rollback transaction. Invalid database ID: %d", id);
+        return res;
+    }
+    res = sqlDatabases[id].rollback();
+    if (! res) {
+        TSqlDatabasePool::instance()->pool(sqlDatabases[id].database(), true);
+    }
+    return res;
 }
 
 
 int TDatabaseContext::idleTime() const
 {
     return (idleElapsed > 0) ? (uint)std::time(nullptr) - idleElapsed : -1;
+}
+
+
+TDatabaseContext *TDatabaseContext::currentDatabaseContext()
+{
+    return reinterpret_cast<TDatabaseContext*>(databaseContextPtrTls.localData());
+}
+
+
+void TDatabaseContext::setCurrentDatabaseContext(TDatabaseContext *context)
+{
+    if (context && databaseContextPtrTls.hasLocalData()) {
+        tSystemWarn("Duplicate set : setCurrentDatabaseContext()");
+    }
+    databaseContextPtrTls.setLocalData((qulonglong)context);
 }

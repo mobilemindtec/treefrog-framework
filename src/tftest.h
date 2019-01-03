@@ -14,8 +14,9 @@
 # include "tsqldatabasepool.h"
 #endif
 
+#define TF_TEST_MAIN(TestObject) TF_TEST_SQL_MAIN(TestObject, true);
 
-#define TF_TEST_MAIN(TestObject) \
+#define TF_TEST_SQL_MAIN(TestObject, EnableTransactions) \
 int main(int argc, char *argv[]) \
 { \
     class Thread : public TActionThread { \
@@ -25,11 +26,12 @@ int main(int argc, char *argv[]) \
     protected: \
         virtual void run() \
         { \
+            setTransactionEnabled(EnableTransactions); \
             TestObject obj; \
             returnCode = QTest::qExec(&obj, QCoreApplication::arguments()); \
             commitTransactions(); \
-            for (QMap<int, QSqlDatabase>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) { \
-                it.value().close(); /* close SQL database */ \
+            for (QMap<int, TSqlTransaction>::iterator it = sqlDatabases.begin(); it != sqlDatabases.end(); ++it) { \
+                it.value().database().close(); /* close SQL database */  \
             } \
             for (QMap<int, TKvsDatabase>::iterator it = kvsDatabases.begin(); it != kvsDatabases.end(); ++it) { \
                 it.value().close(); /* close KVS database */ \
@@ -42,7 +44,6 @@ int main(int argc, char *argv[]) \
     QByteArray codecName = Tf::appSettings()->value(Tf::InternalEncoding, "UTF-8").toByteArray(); \
     QTextCodec *codec = QTextCodec::codecForName(codecName); \
     QTextCodec::setCodecForLocale(codec); \
-    TF_SET_CODEC_FOR_TR(codec); \
     app.setDatabaseEnvironment("test"); \
     TSqlDatabasePool::instantiate(); \
     TKvsDatabasePool::instantiate(); \
@@ -61,7 +62,6 @@ int main(int argc, char *argv[]) \
     QByteArray codecName = Tf::appSettings()->value(Tf::InternalEncoding, "UTF-8").toByteArray(); \
     QTextCodec *codec = QTextCodec::codecForName(codecName); \
     QTextCodec::setCodecForLocale(codec); \
-    TF_SET_CODEC_FOR_TR(codec); \
     TestObject tc; \
     return QTest::qExec(&tc, argc, argv); \
 }

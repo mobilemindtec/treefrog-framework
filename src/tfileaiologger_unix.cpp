@@ -27,9 +27,7 @@ public:
 void TFileAioLoggerData::clearSyncBuffer()
 {
     for (auto cb : (const List<struct aiocb*> &)syncBuffer) {
-        if (cb->aio_buf) {
-            delete (char *)cb->aio_buf;
-        }
+        delete[] (char *)cb->aio_buf;
         delete cb;
     }
     syncBuffer.clear();
@@ -56,6 +54,11 @@ TFileAioLogger::~TFileAioLogger()
 bool TFileAioLogger::open()
 {
     QMutexLocker locker(&d->mutex);
+
+    if (d->fileName.isEmpty()) {
+        tSystemWarn("Empty file name for log.");
+        return false;
+    }
 
     if (d->fileDescriptor <= 0) {
         d->fileDescriptor = ::open(qPrintable(d->fileName), (O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC), 0666);
@@ -121,7 +124,7 @@ void TFileAioLogger::log(const QByteArray &msg)
 
     if (tf_aio_write(cb) < 0) {
         tSystemError("log write failed");
-        delete (char *)cb->aio_buf;
+        delete[] (char *)cb->aio_buf;
         delete cb;
 
         close();

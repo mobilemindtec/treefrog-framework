@@ -1,9 +1,9 @@
 #ifndef TGLOBAL_H
 #define TGLOBAL_H
 
-#define TF_VERSION_STR "1.20.0"
-#define TF_VERSION_NUMBER 0x012000
-#define TF_SRC_REVISION 1592
+#define TF_VERSION_STR "1.23.0"
+#define TF_VERSION_NUMBER 0x012300
+#define TF_SRC_REVISION 1738
 
 #include <QtGlobal>
 #include <QMetaType>
@@ -151,15 +151,6 @@
 #define tDebug TDebug(Tf::DebugLevel).debug
 #define tTrace TDebug(Tf::TraceLevel).trace
 
-#if QT_VERSION < 0x050000
-#  define TF_SET_CODEC_FOR_TR(codec)  do { QTextCodec::setCodecForTr(codec); QTextCodec::setCodecForCStrings(codec); } while (0)
-#  ifndef   Q_DECL_OVERRIDE
-#    define Q_DECL_OVERRIDE
-#  endif
-#else
-#  define TF_SET_CODEC_FOR_TR(codec)
-#endif
-
 
 #include <TfNamespace>
 #include <TDebug>
@@ -194,6 +185,10 @@ namespace Tf
     T_CORE_EXPORT TDatabaseContext *currentDatabaseContext();
     T_CORE_EXPORT QSqlDatabase &currentSqlDatabase(int id);
     T_CORE_EXPORT QMap<QByteArray, std::function<QObject*()>> *objectFactories();
+
+    static constexpr auto CRLFCRLF = "\x0d\x0a\x0d\x0a";
+    static constexpr auto CRLF     = "\x0d\x0a";
+    static constexpr auto LF       = "\x0a";
 }
 
 #endif // TGLOBAL_H

@@ -49,9 +49,7 @@ static bool isNumericType(const QString &typeName)
     case QMetaType::UShort:
     case QMetaType::Double:
     case QMetaType::Float:
-#if QT_VERSION >= 0x050000
     case QMetaType::SChar:
-#endif
         return true;
     default:
         return false;
@@ -60,7 +58,7 @@ static bool isNumericType(const QString &typeName)
 
 
 SqlObjGenerator::SqlObjGenerator(const QString &model, const QString &table)
-    : modelName(), tableSch(new TableSchema(table))
+    : tableSch(new TableSchema(table))
 {
     modelName = (!model.isEmpty()) ? model : fieldNameToEnumName(table);
 }
@@ -126,7 +124,7 @@ QString SqlObjGenerator::generate(const QString &dstDir)
     }
 
     // tableName() method
-    output += QLatin1String("    QString tableName() const override { return QLatin1String(\"");
+    output += QLatin1String("    QString tableName() const override { return QStringLiteral(\"");
     output += tableSch->tableName();
     output += QLatin1String("\"); }\n\n");
 

@@ -18,15 +18,13 @@
 
 #define CONN_NAME_FORMAT  "rdb%02d_%d"
 
-static TSqlDatabasePool *databasePool = 0;
+static TSqlDatabasePool *databasePool = nullptr;
 
 
 static void cleanup()
 {
-    if (databasePool) {
-        delete databasePool;
-        databasePool = 0;
-    }
+    delete databasePool;
+    databasePool = nullptr;
 }
 
 
@@ -165,13 +163,11 @@ QSqlDatabase TSqlDatabasePool::database(int databaseId)
 bool TSqlDatabasePool::setDatabaseSettings(TSqlDatabase &database, const QString &env, int databaseId)
 {
     // Initiates database
-    QSettings &settings = Tf::app()->sqlDatabaseSettings(databaseId);
-    settings.beginGroup(env);
+    const QSettings &settings = Tf::app()->sqlDatabaseSettings(databaseId);
 
-    QString databaseName = settings.value("DatabaseName").toString().trimmed();
+    QString databaseName = settings.value(env + "/DatabaseName").toString().trimmed();
     if (databaseName.isEmpty()) {
         tError("Database name empty string");
-        settings.endGroup();
         return false;
     }
     tSystemDebug("SQL driver name:%s  dbname:%s", qPrintable(database.sqlDatabase().driverName()), qPrintable(databaseName));
@@ -184,55 +180,54 @@ bool TSqlDatabasePool::setDatabaseSettings(TSqlDatabase &database, const QString
     }
     database.sqlDatabase().setDatabaseName(databaseName);
 
-    QString hostName = settings.value("HostName").toString().trimmed();
+    QString hostName = settings.value(env + "/HostName").toString().trimmed();
     tSystemDebug("Database HostName: %s", qPrintable(hostName));
     if (!hostName.isEmpty()) {
         database.sqlDatabase().setHostName(hostName);
     }
 
-    int port = settings.value("Port").toInt();
+    int port = settings.value(env + "/Port").toInt();
     tSystemDebug("Database Port: %d", port);
     if (port > 0) {
         database.sqlDatabase().setPort(port);
     }
 
-    QString userName = settings.value("UserName").toString().trimmed();
+    QString userName = settings.value(env + "/UserName").toString().trimmed();
     tSystemDebug("Database UserName: %s", qPrintable(userName));
     if (!userName.isEmpty()) {
         database.sqlDatabase().setUserName(userName);
     }
 
-    QString password = settings.value("Password").toString().trimmed();
+    QString password = settings.value(env + "/Password").toString().trimmed();
     tSystemDebug("Database Password: %s", qPrintable(password));
     if (!password.isEmpty()) {
         database.sqlDatabase().setPassword(password);
     }
 
-    QString connectOptions = settings.value("ConnectOptions").toString().trimmed();
+    QString connectOptions = settings.value(env + "/ConnectOptions").toString().trimmed();
     tSystemDebug("Database ConnectOptions: %s", qPrintable(connectOptions));
     if (!connectOptions.isEmpty()) {
         database.sqlDatabase().setConnectOptions(connectOptions);
     }
 
-    QStringList postOpenStatements = settings.value("PostOpenStatements").toString().trimmed().split(";", QString::SkipEmptyParts);
+    QStringList postOpenStatements = settings.value(env + "/PostOpenStatements").toString().trimmed().split(";", QString::SkipEmptyParts);
     tSystemDebug("Database postOpenStatements: %s", qPrintable(postOpenStatements.join(";")));
     if (!postOpenStatements.isEmpty()) {
         database.setPostOpenStatements(postOpenStatements);
     }
 
-    bool enableUpsert = settings.value("EnableUpsert", false).toBool();
+    bool enableUpsert = settings.value(env + "/EnableUpsert", false).toBool();
     tSystemDebug("Database enableUpsert: %d", enableUpsert);
     database.setUpsertEnabled(enableUpsert);
 
     auto *extension = TSqlDriverExtensionFactory::create(database.sqlDatabase().driverName(), database.sqlDatabase().driver());
     database.setDriverExtension(extension);
 
-    settings.endGroup();
     return true;
 }
 
 
-void TSqlDatabasePool::pool(QSqlDatabase &database)
+void TSqlDatabasePool::pool(QSqlDatabase &database, bool forceClose)
 {
     T_TRACEFUNC("");
 
@@ -240,10 +235,15 @@ void TSqlDatabasePool::pool(QSqlDatabase &database)
         int databaseId = getDatabaseId(database);
 
         if (databaseId >= 0 && databaseId < Tf::app()->sqlDatabaseSettingsCount()) {
-            // pool
-            cachedDatabase[databaseId].push(database.connectionName());
-            lastCachedTime[databaseId].store((uint)std::time(nullptr));
-            tSystemDebug("Pooled database: %s", qPrintable(database.connectionName()));
+            if (forceClose) {
+                tSystemWarn("Force close database: %s", qPrintable(database.connectionName()));
+                closeDatabase(database);
+            } else {
+                // pool
+                cachedDatabase[databaseId].push(database.connectionName());
+                lastCachedTime[databaseId].store((uint)std::time(nullptr));
+                tSystemDebug("Pooled database: %s", qPrintable(database.connectionName()));
+            }
         } else {
             tSystemError("Pooled invalid database  [%s:%d]", __FILE__, __LINE__);
         }
@@ -269,9 +269,7 @@ void TSqlDatabasePool::timerEvent(QTimerEvent *event)
             while (lastCachedTime[i].load() < (uint)std::time(nullptr) - 30
                    && cache.pop(name)) {
                 QSqlDatabase db = TSqlDatabase::database(name).sqlDatabase();
-                db.close();
-                tSystemDebug("Closed database connection, name: %s", qPrintable(name));
-                availableNames[i].push(name);
+                closeDatabase(db);
             }
         }
     } else {
@@ -279,6 +277,15 @@ void TSqlDatabasePool::timerEvent(QTimerEvent *event)
     }
 }
 
+
+void TSqlDatabasePool::closeDatabase(QSqlDatabase &database)
+{
+    int id = getDatabaseId(database);
+    QString name = database.connectionName();
+    database.close();
+    tSystemDebug("Closed database connection, name: %s", qPrintable(name));
+    availableNames[id].push(name);
+}
 
 /*!
  * Initializes.
@@ -306,10 +313,8 @@ TSqlDatabasePool *TSqlDatabasePool::instance()
 
 QString TSqlDatabasePool::driverType(const QString &env, int databaseId)
 {
-    QSettings &settings = Tf::app()->sqlDatabaseSettings(databaseId);
-    settings.beginGroup(env);
-    QString type = settings.value("DriverType").toString().trimmed();
-    settings.endGroup();
+    const QSettings &settings = Tf::app()->sqlDatabaseSettings(databaseId);
+    QString type = settings.value(env + "/DriverType").toString().trimmed();
 
     if (type.isEmpty()) {
         tDebug("Parameter 'DriverType' is empty");

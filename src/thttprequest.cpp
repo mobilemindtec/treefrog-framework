@@ -11,9 +11,7 @@
 #include <TAppSettings>
 #include <QBuffer>
 #include "tsystemglobal.h"
-#if QT_VERSION >= 0x050000
 #include <QJsonDocument>
-#endif
 
 
 class MethodHash : public QMap<QString, Tf::HttpMethod>
@@ -57,9 +55,7 @@ THttpRequestData::THttpRequestData(const THttpRequestData &other)
       queryItems(other.queryItems),
       formItems(other.formItems),
       multipartFormData(other.multipartFormData),
-#if QT_VERSION >= 0x050000
       jsonData(other.jsonData),
-#endif
       clientAddress(other.clientAddress)
 { }
 
@@ -278,10 +274,43 @@ QStringList THttpRequest::allItemValues(const QString &name, const QList<QPair<Q
 /*!
   Returns the list of query string values whose name is equal to \a name from
   the URL.
+  \see QStringList queryItemList()
  */
 QStringList THttpRequest::allQueryItemValues(const QString &name) const
 {
     return allItemValues(name, d->queryItems);
+}
+
+/*!
+  Returns the list of query string value whose key is equal to \a key, such as
+  "foo[]", from the URL.
+  \see QStringList THttpRequest::allQueryItemValues()
+ */
+QStringList THttpRequest::queryItemList(const QString &key) const
+{
+    QString k = key;
+    if (!k.endsWith("[]")) {
+        k += QLatin1String("[]");
+    }
+    return allQueryItemValues(k);
+}
+
+/*!
+  Returns the list of query value whose key is equal to \a key, such as
+  "foo[]", from the URL.
+ */
+QVariantList THttpRequest::queryItemVariantList(const QString &key) const
+{
+    return itemVariantList(key, d->queryItems);
+}
+
+/*!
+  Returns the map of query value whose key is equal to \a key from
+  the URL.
+ */
+QVariantMap THttpRequest::queryItems(const QString &key) const
+{
+    return itemMap(key, d->queryItems);
 }
 
 
@@ -341,6 +370,7 @@ QString THttpRequest::formItemValue(const QString &name, const QString &defaultV
 /*!
   Returns the list of string value whose name is equal to \a name from the
   form data.
+  \see QStringList formItemList()
  */
 QStringList THttpRequest::allFormItemValues(const QString &name) const
 {
@@ -350,6 +380,7 @@ QStringList THttpRequest::allFormItemValues(const QString &name) const
 /*!
   Returns the list of string value whose key is equal to \a key, such as
   "foo[]", from the form data.
+  \see QStringList allFormItemValues()
  */
 QStringList THttpRequest::formItemList(const QString &key) const
 {
@@ -455,16 +486,12 @@ void THttpRequest::parseBody(const QByteArray &body, const THttpRequestHeader &h
             d->formItems = d->multipartFormData.postParameters;
 
         } else if (ctype.startsWith("application/json", Qt::CaseInsensitive)) {
-#if QT_VERSION >= 0x050000
             QJsonParseError error;
             d->jsonData = QJsonDocument::fromJson(body, &error);
             if (error.error != QJsonParseError::NoError) {
                 tSystemWarn("Json data: %s\n error: %s\n at: %d", body.data(), qPrintable(error.errorString()),
                             error.offset);
             }
-#else
-            tSystemWarn("unsupported content-type: %s", qPrintable(ctype));
-#endif
         } else if (ctype.startsWith("application/x-www-form-urlencoded", Qt::CaseInsensitive)) {
             if (!body.isEmpty()) {
                 const QList<QByteArray> formdata = body.split('&');
@@ -482,7 +509,7 @@ void THttpRequest::parseBody(const QByteArray &body, const THttpRequestHeader &h
         } else {
             tSystemWarn("unsupported content-type: %s", qPrintable(ctype));
         }
-        /* FALL THROUGH */ }
+        /* FALLTHRU */ }
 
     case Tf::Get: {
         // query parameter

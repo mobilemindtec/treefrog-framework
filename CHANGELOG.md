@@ -1,4 +1,23 @@
 # ChangeLog
+## 1.22.0
+ - Support for CMake build.
+ - Support SMTP connections to older servers. #207
+ - Modified log messages.
+ - Fix bugs of tspawn.pro file.
+
+## 1.21.0
+ - Added the option of linking the shared mongoc library.
+ - Fix a bug of line endings of HTTP headers on Windows.
+ - Fix a bug of reloading app libraries.
+ - Fix to return 404 when the action is not found.
+
+## 1.20.0
+ - Implemented rawBody() function in THttpRequest class.
+ - Added some functions for getting query string.
+ - Added sql statements to PostOpenStatements in database.ini.
+ - Fix compilation error on Ubuntu 17.10 and macOS.
+ - Fix compilation error on Qt 5.10.
+
 ## 1.19.0
  - Added TSqlDriverExtension class for upsert statement.
  - Added QString arguments to sort columns function.

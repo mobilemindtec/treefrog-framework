@@ -13,12 +13,7 @@
 #include <TPopMailer>
 #include "tsmtpmailer.h"
 #include "tsystemglobal.h"
-
-#if defined(Q_OS_WIN)
-#  define CRLF "\n"
-#else
-#  define CRLF "\r\n"
-#endif
+using namespace Tf;
 
 //#define tSystemError(fmt, ...)  printf(fmt "\n", ## __VA_ARGS__)
 //#define tSystemDebug(fmt, ...)  printf(fmt "\n", ## __VA_ARGS__)
@@ -29,15 +24,17 @@
   emails by SMTP.
 */
 
-TSmtpMailer::TSmtpMailer(QObject *parent)
-    : QObject(parent), socket(new QSslSocket()), sendMutex(), smtpPort(0), authEnable(false),
-      tlsEnable(false), tlsAvailable(false), pop(nullptr)
+TSmtpMailer::TSmtpMailer(QObject *parent) :
+    QObject(parent),
+    socket(new QSslSocket())
 { }
 
 
-TSmtpMailer::TSmtpMailer(const QString &hostName, quint16 port, QObject *parent)
-    : QObject(parent), socket(new QSslSocket()), sendMutex(), smtpHostName(hostName), smtpPort(port),
-      authEnable(false), tlsEnable(false), tlsAvailable(false), pop(nullptr)
+TSmtpMailer::TSmtpMailer(const QString &hostName, quint16 port, QObject *parent) :
+    QObject(parent),
+    socket(new QSslSocket()),
+    smtpHostName(hostName),
+    smtpPort(port)
 { }
 
 
@@ -48,9 +45,7 @@ TSmtpMailer::~TSmtpMailer()
 //        tSystemWarn("Mail not sent. Deleted it.");
     }
 
-    if (pop) {
-        delete pop;
-    }
+    delete pop;
     delete socket;
 }
 
@@ -89,10 +84,8 @@ void TSmtpMailer::setPopBeforeSmtpAuthEnabled(const QString &popServer, quint16 
         pop->setApopEnabled(apop);
 
     } else {
-        if (pop) {
-            delete pop;
-        }
-        pop = NULL;
+        delete pop;
+        pop = nullptr;
     }
 }
 
@@ -171,9 +164,11 @@ bool TSmtpMailer::send()
     }
 
     if (!cmdEhlo()) {
-        tSystemError("SMTP: EHLO Command Failed");
-        cmdQuit();
-        return false;
+        if (!cmdHelo()) {
+            tSystemError("SMTP: HELO/EHLO Command Failed");
+            cmdQuit();
+            return false;
+        }
     }
 
     if (tlsEnable && tlsAvailable) {
@@ -263,6 +258,24 @@ bool TSmtpMailer::cmdEhlo()
             tlsAvailable = true;
         }
     }
+    return true;
+}
+
+
+bool TSmtpMailer::cmdHelo()
+{
+    QByteArray helo;
+    helo.append("HELO [");
+    helo.append(qPrintable(socket->localAddress().toString()));
+    helo.append("]");
+
+    QList<QByteArray> reply;
+    if (cmd(helo, &reply) != 250) {
+        return false;
+    }
+
+    tlsAvailable = false;
+    authEnable = false;
     return true;
 }
 

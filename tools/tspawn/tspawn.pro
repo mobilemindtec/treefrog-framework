@@ -29,11 +29,6 @@ windows {
 } else:unix {
   LIBS += -Wl,-rpath,$$lib.path -L$$lib.path -ltreefrog
   linux-*:LIBS += -lrt
-
-  # c++11
-  lessThan(QT_MAJOR_VERSION, 5) {
-    QMAKE_CXXFLAGS += -std=c++0x
-  }
 }
 
 isEmpty( target.path ) {
@@ -77,12 +72,30 @@ defaults.files += defaults/JSXTransformer.js
 defaults.files += defaults/react.js
 defaults.files += defaults/react-with-addons.js
 defaults.files += defaults/react-dom-server.js
+# CMake
+defaults.files += defaults/CMakeLists.txt
+defaults.files += defaults/CacheClean.cmake
+defaults.files += defaults/TargetCmake.cmake
+defaults.path   = $${datadir}/defaults
+
+defaults_controllers.files += defaults/controllers/CMakeLists.txt
+defaults_controllers.path   = $${datadir}/defaults/controllers
+defaults_models.files += defaults/models/CMakeLists.txt
+defaults_models.path   = $${datadir}/defaults/models
+defaults_views.files += defaults/views/CMakeLists.txt
+defaults_views.path   = $${datadir}/defaults/views
+defaults_helpers.files += defaults/helpers/CMakeLists.txt
+defaults_helpers.path   = $${datadir}/defaults/helpers
+
 windows {
   defaults.files += defaults/_dummymodel.h
   defaults.files += defaults/_dummymodel.cpp
 }
-defaults.path = $${datadir}/defaults
-INSTALLS += target defaults
+
+cmake.files += defaults/cmake/TreeFrogConfig.cmake
+cmake.path   = $${datadir}/cmake
+
+INSTALLS += target defaults defaults_controllers defaults_models defaults_views defaults_helpers cmake
 
 windows {
   contains(QMAKE_TARGET.arch, x86_64) {
@@ -109,12 +122,22 @@ windows {
 
 # Erases CR codes on UNIX
 !exists(defaults) : system( mkdir defaults )
-for(F, defaults.files) {
-  windows {
-    F = $$replace(F, /, \\)
-    system( COPY /Y ..\\..\\$${F} $${F} > nul )
+
+INS_LIST = defaults.files defaults_controllers.files defaults_models.files defaults_views.files defaults_helpers.files cmake.files
+for(T, INS_LIST) {
+  for(F, $${T}) {
+    windows {
+      F = $$replace(F, /, \\)
+      DIR = $$dirname(F)
+      !exists($${DIR}) : system( mkdir $${DIR} )
+      system( COPY ..\\..\\$${F} $${F} > nul )
+    }
+    unix {
+      DIR = $$dirname(F)
+      !exists($${DIR}) : system( mkdir -p $${DIR} )
+      system( tr -d "\\\\r" < ../../$${F} > $${F} )
+    }
   }
-  unix : system( tr -d "\\\\r" < ../../$${F} > $${F} )
 }
 
 unix {

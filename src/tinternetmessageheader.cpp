@@ -8,12 +8,7 @@
 #include <TInternetMessageHeader>
 #include "tsystemglobal.h"
 #include "thttputility.h"
-
-#ifdef Q_OS_WIN
-#define CRLF "\n"
-#else
-#define CRLF "\r\n"
-#endif
+using namespace Tf;
 
 /*!
   \class TInternetMessageHeader
@@ -214,7 +209,7 @@ void TInternetMessageHeader::parse(const QByteArray &header)
 
     value.reserve(255);
 
-    headerlen = header.indexOf("\r\n\r\n");
+    headerlen = header.indexOf(CRLFCRLF);
     if (headerlen < 0)
         headerlen = header.length();
 
